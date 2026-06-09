@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-06-10
 ### Added
-- Initial release of `remo-cli`.
+- Initial release of `remoro`.
 - `remo init` interactive wizard to create `.remo` configs.
 - `remo` startup panel with rich UI display.
 - `remo remind` for detached cross-platform desktop notifications.

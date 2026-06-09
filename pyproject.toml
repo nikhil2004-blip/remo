@@ -36,8 +36,8 @@ dev = ["pytest", "pytest-cov", "ruff", "black"]
 remo = "remo.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/nikhil2004-blip/remo-cli"
-Issues = "https://github.com/nikhil2004-blip/remo-cli/issues"
+Homepage = "https://github.com/nikhil2004-blip/remo"
+Issues = "https://github.com/nikhil2004-blip/remo/issues"
 
 [tool.ruff]
 line-length = 88
