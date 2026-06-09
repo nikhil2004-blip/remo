@@ -1,0 +1,936 @@
+================================================================================
+                        remo — PROJECT REQUIREMENTS DOCUMENT
+                    Project-Aware Terminal Companion for Developers
+================================================================================
+Author          : Nikhil (nikhil2004-blip)
+Version         : 1.0 — Initial PRD
+Date            : June 2026
+Status          : Ready to Build
+License         : MIT (open source, free forever)
+PyPI Package    : remo-cli
+Command         : remo
+--------------------------------------------------------------------------------
+
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1.  Vision & Problem Statement
+2.  Target Users
+3.  Full Feature List (v1 + v2 roadmap)
+4.  Ideas Merged from Related Problems
+5.  Terminal UI Design
+6.  Config File Specification (.remo / .remo.local)
+7.  Command Reference
+8.  Project Architecture & File Structure
+9.  Tech Stack & Dependencies
+10. Coding Guidelines
+11. Cross-Platform Notification System
+12. Installation & Distribution
+13. Testing Plan
+14. Deployment to PyPI
+15. GitHub Repository Setup
+16. Known Loopholes & How We Handle Them
+17. v2 Roadmap
+18. Out of Scope (Things We Are NOT Building)
+================================================================================
+
+
+================================================================================
+1. VISION & PROBLEM STATEMENT
+================================================================================
+
+Every developer loses context when switching between projects. You open a
+terminal, cd into a project, and spend the first 5 minutes remembering:
+  - What was I working on last time?
+  - Did I start the dev server? Which command was it again?
+  - I need to push before the meeting in 30 minutes.
+  - Is my .env set up correctly after that last pull?
+
+README files exist but nobody reads them mid-session. Cron jobs are too
+heavy for session reminders. Google Calendar is being abused for "push
+branch in 20 minutes" reminders. Shell aliases help but aren't documented
+or shareable.
+
+remo is a zero-dependency*, lightweight CLI tool that:
+  - Knows which project you're in
+  - Shows a startup checklist when you open a project
+  - Fires desktop notifications (or terminal alerts) after a set time
+  - Validates your environment before you start
+  - Keeps a micro-log of what you did (your personal standup notes)
+  - Lets you define project shortcuts everyone on the team can use
+
+It is NOT an AI tool. It is NOT a task manager. It is NOT a dashboard.
+It is a smart sticky note for your terminal session.
+
+*Runtime: Python stdlib only for core. click + rich for UX. plyer for notifications.
+
+
+================================================================================
+2. TARGET USERS
+================================================================================
+
+PRIMARY
+  - CS students juggling 5+ projects (college assignments, internships, side projects)
+  - Solo developers / indie hackers who keep 3–10 active repos
+  - Open source contributors who come back to a repo after weeks
+
+SECONDARY
+  - Small dev teams (2–5 people) sharing project workflows via committed .remo file
+  - Anyone who has ever typed "what was the command to start this thing again"
+
+NOT TARGETING (yet)
+  - Enterprise / large teams — that's a v3 problem
+  - Non-developers — this is a terminal tool, intentionally
+
+
+================================================================================
+3. FULL FEATURE LIST
+================================================================================
+
+--- V1 FEATURES (build these, ship these) ---
+
+[F01] PROJECT INIT
+  remo init
+  - Interactive setup wizard in the terminal
+  - Creates .remo (committed config) and .remo.local (gitignored personal overrides)
+  - Asks: project name, startup steps, auto-reminders, env file path, shortcuts
+  - Adds .remo.local to .gitignore automatically if git repo detected
+
+[F02] STARTUP DISPLAY
+  remo (run with no args)
+  - Shows a formatted startup panel:
+      > Project name + last opened timestamp
+      > Startup checklist (each item is a line, not interactive checkboxes — just read)
+      > Active shortcuts available
+      > Any pending reminders from last session that were never snoozed/dismissed
+  - Clean, colored output using `rich` (see UI section)
+  - Runs in under 200ms (no network calls, no heavy ops)
+
+[F03] ONE-OFF REMINDERS
+  remo remind <time> "<message>"
+  Examples:
+      remo remind 20m "push to GitHub before meeting"
+      remo remind 1h "run tests"
+      remo remind 90s "check if server started"
+  - Supported units: s (seconds), m (minutes), h (hours)
+  - Fires a desktop notification (platform-specific, see Section 11)
+  - Falls back to terminal bell + printed message if notifications unavailable
+  - Runs as a detached subprocess — does not block the terminal
+  - For reminders > 15 minutes: optionally write to system cron as fallback
+    so it survives terminal close (opt-in via --persist flag)
+
+[F04] AUTO-REMINDERS (SESSION BASED)
+  Defined in .remo config, fires automatically when remo is run
+  Example config:
+      { "after": "30m", "message": "Push to GitHub" }
+      { "after": "60m", "message": "Run tests before you sleep" }
+  - Timer starts when `remo` is run at session open
+  - All auto-reminders launch as detached subprocesses
+
+[F05] ENVIRONMENT VALIDATION
+  remo check
+  - Checks defined in .remo config, run on demand or auto on `remo` startup
+  - Supported check types:
+      env     → compare .env against .env.example, list missing keys
+      version → verify tool version meets minimum (node, python, java, etc.)
+      file    → assert a file exists (e.g. credentials.json)
+      cmd     → run a shell command and check exit code (e.g. "docker ps")
+  - Color coded output: green (pass), yellow (warning), red (fail)
+  - On failure: shows exactly what is wrong, not a generic error
+
+[F06] PROJECT MICRO-LOG
+  remo log ["<message>"]
+  - `remo log "fixed auth redirect bug"` → appends timestamped entry to .remo.log
+  - `remo log` (no args) → shows last 10 entries with timestamps
+  - .remo.log is gitignored by default (personal, not team)
+  - Entries format: [2026-06-10 14:32] fixed auth redirect bug
+  - Use case: quick standup notes, personal commit message drafts, breadcrumbs
+
+[F07] PROJECT SHORTCUTS
+  remo run <shortcut_name>
+  Defined in .remo:
+      "shortcuts": {
+          "dev":   "uvicorn main:app --reload",
+          "test":  "pytest tests/ -v --tb=short",
+          "lint":  "ruff check . && black --check .",
+          "clean": "find . -name '__pycache__' -exec rm -rf {} +"
+      }
+  - `remo run dev`  → executes the mapped command
+  - `remo shortcuts` → lists all available shortcuts for this project
+  - Shortcuts are committed in .remo so teammates get them too
+  - .remo.local can override shortcuts for personal preferences
+
+[F08] SNOOZE
+  remo snooze [<time>]
+  - Snoozes the most recently fired reminder
+  - Default snooze: 10 minutes
+  - `remo snooze 5m` → snooze for 5 minutes
+  - Fires again after the snooze period with "[SNOOZED]" prefix in message
+
+[F09] SESSION STATUS
+  remo status
+  - Shows: session start time, elapsed time, reminders queued, last log entry
+  - Quick glance at where your session stands
+
+[F10] REMO GLOBAL CONFIG
+  ~/.remo/config.json
+  - Default notification preference (desktop / terminal / both)
+  - Default snooze duration
+  - Theme preference (see UI section)
+  - Whether to show startup panel automatically on remo run
+
+
+--- V2 FEATURES (defined now, built later) ---
+  See Section 17.
+
+
+================================================================================
+4. IDEAS MERGED FROM RELATED PROBLEMS
+================================================================================
+
+The following ideas from adjacent problems were evaluated and merged into remo
+where they fit without bloating scope.
+
+[MERGED] .env validation (from "checkenv" idea)
+  → Becomes the `env` check type in F05. Run `remo check` and it diffs .env
+  against .env.example. Same problem, now baked into project context.
+
+[MERGED] "What did I last do" session memory
+  → Becomes F06 (micro-log). Explicit logging > history scraping.
+  Better signal, no privacy issues from reading shell history.
+
+[MERGED] Copy-without-formatting / quick clipboard tools
+  → NOT merged. That's a browser extension problem, not a terminal problem.
+  Keep remo terminal-only.
+
+[MERGED] Reading time / page info
+  → NOT merged. Browser problem.
+
+[MERGED] Dead link checker
+  → Added as a check type in v2: `remo check --links README.md`
+  Checks all URLs in a file for 404s. Fits the "project health check" pattern.
+
+[MERGED] Invoice / freelance tools
+  → NOT merged. Different audience entirely.
+
+[MERGED] Webpage change monitor
+  → NOT merged. Different tool category. remo is session/project aware,
+  not a background daemon watching URLs.
+
+[MERGED] Terminal UI richness (from general gap in ugly CLI tools)
+  → remo will use `rich` for all output. Panels, colored text, tables, progress
+  bars. The terminal experience should feel polished, not like a 1990s script.
+  See Section 5.
+
+
+================================================================================
+5. TERMINAL UI DESIGN
+================================================================================
+
+Library: rich (https://github.com/Textualize/rich)
+Reason: Zero visual config needed, looks great out of the box, no heavy deps.
+
+--- STARTUP PANEL (remo with no args) ---
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  remo  ·  PlaceMate                           last opened: 2h ago   │
+└─────────────────────────────────────────────────────────────────────┘
+
+  📋 Startup Checklist
+  ─────────────────────────────────────────────────
+   1  source .venv/bin/activate
+   2  uvicorn main:app --reload
+   3  Verify .env is filled (run: remo check)
+   4  Start MCP graph server: node mcp/server.js
+
+  ⚡ Shortcuts   dev · test · lint · clean
+  📓 Last log    [Yesterday 23:11] fixed RBAC middleware
+  ⏰ Reminders   auto-fires in: 30m → "Push to GitHub"
+
+  Type  remo log   to add a note   |   remo run dev   to start
+
+NOTE: No interactive UI. No cursor movement. Just a clean read-only panel.
+remo is not a TUI app. It prints and exits. Fast.
+
+--- remo check output ---
+
+  Environment Check ─────────────────────────────
+  ✓  .env      all 12 keys present
+  ✗  python    need >= 3.11, found 3.10.6
+  ✓  docker    running (exit 0)
+  !  node      not found (shortcuts using node will fail)
+
+--- remo log (list) output ---
+
+  📓 Project Log — PlaceMate
+  ───────────────────────────────────────────────
+  [2026-06-10 14:32]  fixed auth redirect bug
+  [2026-06-09 22:01]  rewrote RBAC middleware, needs tests
+  [2026-06-09 18:45]  set up Redis for session caching
+  [2026-06-08 11:30]  initial PlaceMate takeover, reading codebase
+
+--- COLOR SCHEME ---
+  Green  (#00C853)  → pass / success / done
+  Yellow (#FFD600)  → warning / info / reminder
+  Red    (#FF1744)  → fail / error / urgent
+  Cyan   (#00B8D4)  → labels, headers, project name
+  White             → body text
+  Dim white         → metadata (timestamps, hints)
+
+--- THEMES ---
+  default  → colors as above (dark terminal assumed)
+  minimal  → no colors, no borders, plain text (for CI/CD or log piping)
+  Set in ~/.remo/config.json: { "theme": "minimal" }
+
+--- NOTIFICATION FORMAT ---
+  Title:   remo · PlaceMate
+  Body:    Push to GitHub  [set 30m ago]
+  Sound:   system default (brief)
+
+
+================================================================================
+6. CONFIG FILE SPECIFICATION
+================================================================================
+
+FILE: .remo  (committed to git — team-shared)
+FILE: .remo.local  (gitignored — personal overrides)
+
+FORMAT: JSON (chosen over TOML for zero extra deps in Python stdlib)
+
+--- FULL .remo SCHEMA ---
+
+{
+    "project": "PlaceMate",
+
+    "startup": [
+        "source .venv/bin/activate",
+        "uvicorn main:app --reload",
+        "Check .env is filled (run: remo check)",
+        "Start MCP server: node mcp/graph_server.js"
+    ],
+
+    "reminders": [
+        { "after": "30m",  "message": "Push to GitHub" },
+        { "after": "60m",  "message": "Run tests before you stop" },
+        { "after": "90m",  "message": "Take a break, seriously" }
+    ],
+
+    "checks": [
+        { "type": "env",     "file": ".env.example" },
+        { "type": "version", "tool": "python",  "min": "3.11" },
+        { "type": "version", "tool": "node",    "min": "18.0" },
+        { "type": "file",    "path": "credentials.json" },
+        { "type": "cmd",     "cmd": "docker ps", "label": "docker running" }
+    ],
+
+    "shortcuts": {
+        "dev":   "uvicorn main:app --reload",
+        "test":  "pytest tests/ -v --tb=short",
+        "lint":  "ruff check . && black --check .",
+        "clean": "find . -name '__pycache__' -exec rm -rf {} +"
+    }
+}
+
+--- .remo.local (overrides .remo, gitignored) ---
+{
+    "startup": [
+        "source ~/.ssh/add_work_keys.sh",
+        "open http://localhost:8000/docs"
+    ],
+    "shortcuts": {
+        "dev": "uvicorn main:app --reload --port 9000"
+    }
+}
+Local startup list APPENDS to .remo startup (doesn't replace).
+Local shortcuts OVERRIDE matching keys in .remo shortcuts.
+
+--- GITIGNORE AUTO-PATCH ---
+When `remo init` runs in a git repo, it appends these lines to .gitignore:
+    .remo.local
+    .remo.log
+
+If .gitignore doesn't exist, it creates it.
+
+--- VALIDATION ---
+remo validates .remo on every run. If schema is invalid, it prints a clear
+error pointing to the bad field. It does NOT crash silently.
+
+
+================================================================================
+7. COMMAND REFERENCE
+================================================================================
+
+COMMAND             ARGS                    DESCRIPTION
+─────────────────────────────────────────────────────────────────────────────
+remo                (none)                  Show startup panel, fire auto-reminders
+remo init           (interactive)           Create .remo config for this project
+remo remind         <time> "<msg>"          Set a one-off reminder
+remo remind         --persist <time> "<msg" One-off reminder that survives terminal close
+remo check          (none)                  Run all environment checks
+remo check          --env-only              Only check .env vs .env.example
+remo log            (none)                  Show last 10 log entries
+remo log            "<message>"             Append a log entry
+remo log            --all                   Show full log history
+remo run            <shortcut>              Execute a defined shortcut
+remo shortcuts      (none)                  List all shortcuts for this project
+remo snooze         (none)                  Snooze most recent reminder by 10m
+remo snooze         <time>                  Snooze most recent reminder by <time>
+remo status         (none)                  Show session time, queued reminders, last log
+remo config         (none)                  Show/edit global ~/.remo/config.json
+remo version        (none)                  Show remo version
+remo --help         (none)                  Show help
+
+─────────────────────────────────────────────────────────────────────────────
+TIME FORMAT:  <number><unit>
+Units:        s = seconds, m = minutes, h = hours
+Examples:     30s  10m  2h  90m
+─────────────────────────────────────────────────────────────────────────────
+
+
+================================================================================
+8. PROJECT ARCHITECTURE & FILE STRUCTURE
+================================================================================
+
+remo-cli/
+├── remo/                          # Main package
+│   ├── __init__.py
+│   ├── cli.py                     # Entry point — click command group
+│   ├── commands/
+│   │   ├── __init__.py
+│   │   ├── init.py                # remo init
+│   │   ├── startup.py             # remo (default, no args)
+│   │   ├── remind.py              # remo remind
+│   │   ├── check.py               # remo check
+│   │   ├── log.py                 # remo log
+│   │   ├── run.py                 # remo run
+│   │   ├── snooze.py              # remo snooze
+│   │   └── status.py              # remo status
+│   ├── config/
+│   │   ├── __init__.py
+│   │   ├── loader.py              # Load + merge .remo and .remo.local
+│   │   ├── schema.py              # Validate config schema
+│   │   └── global_config.py       # ~/.remo/config.json handler
+│   ├── notifications/
+│   │   ├── __init__.py
+│   │   ├── dispatcher.py          # Detect OS, route to right notifier
+│   │   ├── macos.py               # osascript / AppleScript
+│   │   ├── linux.py               # notify-send
+│   │   ├── windows.py             # PowerShell toast
+│   │   └── fallback.py            # Terminal bell + rich print
+│   ├── checks/
+│   │   ├── __init__.py
+│   │   ├── env_check.py           # .env vs .env.example diff
+│   │   ├── version_check.py       # Tool version validation
+│   │   ├── file_check.py          # File existence check
+│   │   └── cmd_check.py           # Shell command exit code check
+│   └── ui/
+│       ├── __init__.py
+│       ├── panels.py              # rich panels and layout
+│       ├── colors.py              # Theme definitions
+│       └── icons.py               # Emoji / ASCII fallbacks for Windows
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_config_loader.py
+│   ├── test_schema_validation.py
+│   ├── test_env_check.py
+│   ├── test_version_check.py
+│   ├── test_remind_parser.py
+│   ├── test_cli_commands.py       # CLI integration tests using click.testing
+│   └── fixtures/
+│       ├── sample.remo
+│       ├── sample.env
+│       └── sample.env.example
+│
+├── pyproject.toml                 # Build config + metadata
+├── README.md                      # Short, scannable, with GIF demo
+├── CHANGELOG.md
+├── LICENSE                        # MIT
+└── .github/
+    └── workflows/
+        ├── test.yml               # Run pytest on push
+        └── publish.yml            # Publish to PyPI on tag push
+
+
+DATA FILES (local to user machine, not in repo)
+~/.remo/
+├── config.json                    # Global preferences
+└── sessions/
+    └── <project-hash>.json        # Per-project session state (last opened, snooze queue)
+
+Per-project (in project directory, gitignored)
+.remo.local                        # Personal overrides
+.remo.log                          # Micro-log entries
+
+
+================================================================================
+9. TECH STACK & DEPENDENCIES
+================================================================================
+
+LANGUAGE        Python 3.9+  (wide compatibility, no bleeding edge)
+
+CORE RUNTIME DEPENDENCIES
+  click           CLI framework — commands, args, flags, help text
+  rich            Terminal UI — panels, colors, tables, icons
+  plyer           Cross-platform desktop notifications (macOS/Linux/Windows)
+
+WHY NOT NODE/npm INSTEAD?
+  - plyer gives us notifications cross-platform with one API
+  - Python is better for file system + subprocess ops
+  - pipx is now standard for CLI tools in Python
+  - Python 3.9+ is on virtually every dev machine
+
+DEV/TEST DEPENDENCIES
+  pytest          Test runner
+  pytest-cov      Coverage reports
+  click.testing   CLI command testing (built into click)
+  ruff            Linter
+  black           Formatter
+
+NO DEPENDENCY ON:
+  - requests / httpx (no network calls in v1)
+  - pydantic (schema validation is manual JSON check, simple enough)
+  - Any AI/ML library
+  - Any database (SQLite, etc.) — flat files only
+
+PYTHON VERSION SUPPORT
+  Minimum: 3.9
+  Tested on: 3.9, 3.10, 3.11, 3.12
+  CI matrix: all four versions on ubuntu-latest, macos-latest, windows-latest
+
+
+================================================================================
+10. CODING GUIDELINES
+================================================================================
+
+STYLE
+  - Black for formatting (line length 88)
+  - Ruff for linting (replaces flake8 + isort)
+  - Type hints on all function signatures
+  - Docstrings on all public functions (one-line where obvious)
+
+PRINCIPLES
+  - Every command must work in under 200ms (no slow startups)
+  - Every error must print what went wrong AND what to do about it
+  - No silent failures. If a check fails, say so. If notifications can't fire, say so.
+  - Graceful degradation: if plyer is unavailable, fall back to terminal output
+  - The .remo config is the source of truth — never hardcode project-specific logic
+
+ERROR HANDLING PATTERN
+  try:
+      result = do_thing()
+  except KnownError as e:
+      console.print(f"[red]✗ Error:[/red] {e}")
+      console.print(f"[dim]  Hint: {e.hint}[/dim]")
+      sys.exit(1)
+
+  Never print a raw Python traceback to the user. Catch, explain, exit cleanly.
+
+SUBPROCESS FOR REMINDERS
+  # Detached subprocess pattern (cross-platform)
+  import subprocess, sys
+  proc = subprocess.Popen(
+      [sys.executable, "-m", "remo._reminder_worker", str(seconds), message],
+      stdout=subprocess.DEVNULL,
+      stderr=subprocess.DEVNULL,
+      start_new_session=True    # detach from parent process group
+  )
+  # Parent process continues immediately. Worker sleeps then notifies.
+
+
+================================================================================
+11. CROSS-PLATFORM NOTIFICATION SYSTEM
+================================================================================
+
+STRATEGY: Try desktop notification first. Fall back to terminal if unavailable.
+
+MACOS
+  Primary:  plyer.notification.notify()
+  Fallback: osascript -e 'display notification "msg" with title "remo"'
+  Note:     macOS 10.14+ requires app to be in notification preferences.
+            plyer handles this. First run may ask for permission.
+
+LINUX
+  Primary:  plyer.notification.notify() → uses libnotify under the hood
+  Fallback: notify-send "remo · Project" "message"
+  Note:     requires libnotify-bin on Ubuntu. If missing, falls to terminal.
+            Check: `which notify-send` before using.
+
+WINDOWS
+  Primary:  plyer.notification.notify() → uses win10toast
+  Fallback: PowerShell:
+            [Windows.UI.Notifications.ToastNotificationManager]::...
+  Note:     Windows toast notifications require Windows 10+.
+            plyer handles the boilerplate.
+
+UNIVERSAL FALLBACK (all platforms)
+  If all desktop notification methods fail:
+  1. Print a bright yellow bordered panel via rich
+  2. Ring terminal bell (\a)
+  3. Log the fired reminder to ~/.remo/sessions/<hash>.json
+
+DETECTION LOGIC (notifications/dispatcher.py)
+  import platform
+  OS = platform.system()   # 'Darwin', 'Linux', 'Windows'
+  
+  def notify(title, message):
+      try:
+          from plyer import notification
+          notification.notify(title=title, message=message, timeout=10)
+      except Exception:
+          _fallback_notify(title, message)
+
+
+================================================================================
+12. INSTALLATION & DISTRIBUTION
+================================================================================
+
+RECOMMENDED INSTALL (for end users)
+  pipx install remo-cli
+  → installs in isolated env, `remo` available globally in PATH
+
+ALTERNATIVE
+  pip install remo-cli
+  → works but may conflict with other projects' envs
+
+DEVELOPMENT INSTALL
+  git clone https://github.com/nikhil2004-blip/remo-cli
+  cd remo-cli
+  pip install -e ".[dev]"    # editable install with dev deps
+
+VERIFY INSTALL
+  remo --version
+  remo --help
+
+SHELL HOOK (optional, opt-in)
+  To auto-run `remo` when you cd into a project directory, users can add
+  this to their .zshrc / .bashrc:
+
+  # remo auto-launch on cd
+  remo_cd() {
+      builtin cd "$@" && [ -f ".remo" ] && remo
+  }
+  alias cd='remo_cd'
+
+  This is NEVER added automatically. Documented in README as an optional step.
+  Reason: auto-hijacking `cd` without permission is hostile UX.
+
+
+================================================================================
+13. TESTING PLAN
+================================================================================
+
+UNIT TESTS  (tests/)
+
+  test_config_loader.py
+    - Load valid .remo → returns correct dict
+    - Load .remo + .remo.local → local overrides merged correctly
+    - Missing .remo in directory → clean error, not crash
+    - Invalid JSON in .remo → clean error with line hint
+
+  test_schema_validation.py
+    - Valid full schema → passes
+    - Missing optional fields → passes (all fields optional except project name)
+    - Unknown field → warning (not error) — forward compat
+    - reminder with bad time format ("30x") → fails with hint
+
+  test_env_check.py
+    - .env has all keys from .env.example → all green
+    - .env missing 2 keys → those 2 shown as red
+    - .env.example missing → skip check with warning
+    - Empty .env → all keys missing → all red
+
+  test_version_check.py
+    - python version meets minimum → green
+    - node version below minimum → red with installed vs required shown
+    - tool not installed → shown as missing, not crash
+
+  test_remind_parser.py
+    - "30m" → 1800 seconds
+    - "2h" → 7200 seconds
+    - "90s" → 90 seconds
+    - "5" (no unit) → error: unit required
+    - "0m" → error: must be > 0
+    - "99h" → warning: that's a very long time, proceed? (y/n)
+
+  test_cli_commands.py  (click.testing.CliRunner)
+    - remo --help → exit 0, shows commands
+    - remo version → prints version string
+    - remo log "test entry" → writes to .remo.log
+    - remo log (no args, no log file) → clean "no entries yet" message
+    - remo check (no .remo) → clean error message
+    - remo run dev (shortcut defined) → command echoed + executed
+    - remo run missing → clean error: shortcut not found
+
+CI CONFIGURATION (.github/workflows/test.yml)
+  - Trigger: push to main, push to any branch, pull request
+  - Matrix: python 3.9/3.10/3.11/3.12 × ubuntu/macos/windows
+  - Steps: checkout → setup python → pip install -e ".[dev]" → pytest --cov
+  - Coverage report uploaded to Codecov (optional but nice)
+
+COVERAGE TARGET
+  v1 launch: 80%+ coverage
+  All check types (env/version/file/cmd): 100%
+  Notification dispatcher: mocked (can't test real notifications in CI)
+
+MANUAL TEST CHECKLIST (run before each PyPI release)
+  [ ] remo init creates valid .remo interactively
+  [ ] remo startup panel renders cleanly on 80-col terminal
+  [ ] remo remind 10s "test" fires notification within 12 seconds
+  [ ] remo check passes on a correct env, fails correctly on bad one
+  [ ] remo log writes and displays correctly
+  [ ] remo run executes the right command
+  [ ] .remo.local overrides work
+  [ ] Install via pipx works on clean machine
+  [ ] Works with Python 3.9 (oldest supported)
+
+
+================================================================================
+14. DEPLOYMENT TO PyPI
+================================================================================
+
+BUILD SYSTEM
+  pyproject.toml using hatchling (modern, no setup.py needed)
+
+pyproject.toml STRUCTURE
+─────────────────────────
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "remo-cli"
+version = "0.1.0"
+description = "Project-aware terminal companion for developers"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [{ name = "Nikhil", email = "your@email.com" }]
+keywords = ["cli", "developer-tools", "productivity", "terminal", "reminders"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.0",
+    "rich>=13.0",
+    "plyer>=2.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff", "black"]
+
+[project.scripts]
+remo = "remo.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/nikhil2004-blip/remo-cli"
+Issues = "https://github.com/nikhil2004-blip/remo-cli/issues"
+─────────────────────────
+
+RELEASE PROCESS
+  Step 1: Bump version in pyproject.toml
+  Step 2: Update CHANGELOG.md
+  Step 3: Commit: git commit -m "release: v0.1.0"
+  Step 4: Tag:    git tag v0.1.0
+  Step 5: Push:   git push origin main --tags
+  Step 6: GitHub Actions publishes to PyPI automatically (publish.yml)
+
+PUBLISH WORKFLOW (.github/workflows/publish.yml)
+  Trigger: push of tag matching v*.*.*
+  Steps:
+    - Run full test suite (same matrix as test.yml)
+    - If all pass: build wheel + sdist with `hatch build`
+    - Publish to PyPI using pypa/gh-action-pypi-publish
+    - Requires PYPI_API_TOKEN secret in GitHub repo settings
+
+VERSIONING SCHEME
+  0.1.0   → first PyPI release (v1 features complete)
+  0.1.x   → bug fixes
+  0.2.0   → new features (v2 items)
+  1.0.0   → stable, battle-tested, 100+ GitHub stars
+
+
+================================================================================
+15. GITHUB REPOSITORY SETUP
+================================================================================
+
+REPO NAME:    remo-cli
+VISIBILITY:   Public
+LICENSE:      MIT
+
+BRANCH STRUCTURE
+  main          → stable, always deployable
+  dev           → active development, PRs merge here first
+  feature/*     → individual features
+
+README.md MUST INCLUDE
+  - One-line description
+  - Animated terminal GIF (record with vhs or terminalizer)
+  - Install command (pipx install remo-cli)
+  - 5 most common usage examples
+  - .remo config example
+  - Badge: PyPI version, Python versions, License, Tests passing
+
+GITHUB TOPICS (for discoverability)
+  cli, developer-tools, productivity, python, terminal,
+  reminders, project-management, dotfiles
+
+ISSUES TEMPLATES
+  - Bug report template
+  - Feature request template
+
+RELEASE NOTES
+  Every tag gets a GitHub Release with:
+  - What's new
+  - What's fixed
+  - Install/upgrade command
+
+SOCIAL PROOF PLAN (for after launch)
+  - Post on r/programming, r/Python, r/commandline
+  - Show Your Work post on GitHub Discussions
+  - Tweet / post demo GIF
+
+
+================================================================================
+16. KNOWN LOOPHOLES & HOW WE HANDLE THEM
+================================================================================
+
+LOOPHOLE 1: Auto-cd hook feels intrusive
+  Solution: Opt-in only. Documented as optional in README. Never auto-installed.
+
+LOOPHOLE 2: Reminders die when terminal closes
+  Solution:
+    - Default behavior: subprocess dies with terminal. We document this.
+    - For reminders > 15min: --persist flag writes a cron entry (Linux/macOS)
+      or a Windows Task Scheduler entry. Survives terminal close.
+    - Short reminders (< 15min): no persist needed, user is probably at the desk.
+
+LOOPHOLE 3: Config conflicts in team repos
+  Solution: .remo (team config) + .remo.local (personal overrides). Same
+  pattern as .env / .env.local. Familiar, simple, works.
+
+LOOPHOLE 4: Notification permission on macOS
+  Solution: plyer handles this. First notification may pop a system permission
+  dialog. We document this in README and add a one-time "test notification"
+  step to `remo init` flow.
+
+LOOPHOLE 5: Windows terminal emoji rendering
+  Solution: ui/icons.py detects Windows and substitutes ASCII equivalents:
+  ✓ → [OK]   ✗ → [FAIL]   ⚡ → >>   📋 → [LIST]   ⏰ → [TIME]
+  Can be forced with: remo config set icons ascii
+
+LOOPHOLE 6: Multiple projects open simultaneously
+  Solution: Each `remo` invocation is independent. Reminders fire from the
+  subprocess associated with that terminal session. No shared state between
+  concurrent sessions of different projects.
+
+LOOPHOLE 7: .remo committed to git exposes internal commands
+  Solution: This is intentional and a feature. It's documentation in code form.
+  If commands are sensitive, they go in .remo.local (gitignored).
+
+LOOPHOLE 8: remo name conflicts with existing tools
+  PyPI package name: remo-cli  (pip install remo-cli)
+  Binary command:    remo       (what you type)
+  Check for conflicts: `which remo` before installing. Document in README.
+
+LOOPHOLE 9: Python not in PATH / wrong version on some systems
+  Solution: Recommend pipx explicitly. pipx handles Python env isolation.
+  Fallback: `python3 -m remo` works as long as the package is installed.
+
+
+================================================================================
+17. V2 ROADMAP
+================================================================================
+
+These are defined now, NOT built in v1. Prevents scope creep.
+
+[V2-01] DEAD LINK CHECKER
+  remo check --links README.md
+  Scans all URLs in a file, checks HTTP status codes, reports broken ones.
+  Uses urllib (stdlib) — no requests dependency.
+
+[V2-02] TEAM .remo (SHARED SHORTCUTS + DOCS)
+  remo docs → render .remo startup list as a pretty onboarding guide
+  Aimed at new contributors: "here's how to get this project running"
+  Basically a dynamic CONTRIBUTING.md replacement.
+
+[V2-03] REMO HISTORY / STATS
+  remo stats → shows: total sessions, average session length, most used shortcuts
+  Stored in ~/.remo/sessions/ JSON files. All local.
+
+[V2-04] DAILY STANDUP DIGEST
+  remo standup → formats last 24h of log entries into a standup-ready summary
+  "Yesterday: fixed auth bug, rewrote RBAC. Today: write tests."
+  Copy-paste into Slack/WhatsApp/Teams.
+
+[V2-05] TEMPLATE LIBRARY
+  remo init --template flask / nextjs / flutter / godot
+  Pre-fills .remo with sensible defaults for popular project types.
+  Community-contributed via GitHub PR.
+
+[V2-06] REMO DOCTOR
+  remo doctor → full health check of remo installation
+  Checks: Python version, plyer working, notifications working, global config valid
+  Aimed at troubleshooting install issues.
+
+[V2-07] GIT INTEGRATION
+  remo check --git → warns if uncommitted changes + last commit was > Xh ago
+  "You have 7 uncommitted files and haven't committed in 4 hours."
+  Uses git subprocess call, no gitpython dependency.
+
+
+================================================================================
+18. OUT OF SCOPE — THINGS WE ARE NOT BUILDING
+================================================================================
+
+These are explicitly excluded from remo. If anyone asks for them, the answer
+is "not in remo — here's a better tool for that."
+
+  ✗ Web dashboard or GUI — remo is terminal-only, forever
+  ✗ Cloud sync of configs or logs — local-only, by design
+  ✗ Team collaboration features — configs are files, use git
+  ✗ AI-powered suggestions — this whole tool is a reaction against AI bloat
+  ✗ Time tracking / invoicing — different tool category
+  ✗ Task management / todo lists — use a dedicated tool
+  ✗ Browser extension — separate project
+  ✗ Mobile app — pointless for a terminal tool
+  ✗ Plugin/extension system in v1 — add in v2 when patterns are clear
+  ✗ Analytics / telemetry — zero data collection, ever
+
+
+================================================================================
+BUILD ORDER — START HERE
+================================================================================
+
+Week 1: Core
+  Day 1  → pyproject.toml, package scaffold, cli.py entry point, remo --help works
+  Day 2  → config/loader.py: load .remo, merge .remo.local, validate schema
+  Day 3  → commands/startup.py: render startup panel with rich
+  Day 4  → commands/remind.py: parse time, launch detached subprocess notifier
+  Day 5  → notifications/dispatcher.py: cross-platform notify + fallback
+
+Week 2: Features + Polish
+  Day 6  → checks/env_check.py + version_check.py + cmd_check.py
+  Day 7  → commands/check.py: run all checks, colored output
+  Day 8  → commands/log.py: append + display log
+  Day 9  → commands/run.py + commands/init.py (interactive wizard)
+  Day 10 → commands/snooze.py + commands/status.py
+
+Week 3: Ship
+  Day 11 → Full test suite, fix failures
+  Day 12 → pyproject.toml finalized, test PyPI upload (TestPyPI first)
+  Day 13 → README with GIF, CHANGELOG, GitHub release
+  Day 14 → pip install remo-cli works on a clean machine. Done. Ship it.
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+remo — built by Nikhil, free forever, MIT licensed
+https://github.com/nikhil2004-blip/remo-cli
+================================================================================

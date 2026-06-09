@@ -1,0 +1,19 @@
+{
+    "project": "TestProject",
+    "startup": [
+        "source .venv/bin/activate",
+        "uvicorn main:app --reload"
+    ],
+    "reminders": [
+        { "after": "30m", "message": "Push to GitHub" },
+        { "after": "60m", "message": "Run tests" }
+    ],
+    "checks": [
+        { "type": "env",     "file": ".env.example" },
+        { "type": "file",    "path": "requirements.txt" }
+    ],
+    "shortcuts": {
+        "dev":  "uvicorn main:app --reload",
+        "test": "pytest tests/ -v"
+    }
+}
