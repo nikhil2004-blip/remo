@@ -1,4 +1,4 @@
-# remo-cli
+# remoro
 
 > A smart sticky note for your terminal because your memory is garbage and you know it.
 
@@ -21,9 +21,9 @@ Enter `remo`.
 
 Use `pipx` (highly recommended so it installs globally without polluting your system Python):
 ```bash
-pipx install remo-cli
+pipx install remoro
 ```
-*Or just `pip install remo-cli` if you like living dangerously.*
+*Or just `pip install remoro` if you like living dangerously.*
 
 Verify it didn't break:
 ```bash

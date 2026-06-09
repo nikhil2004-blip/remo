@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "remo-cli"
+name = "remoro"
 version = "0.1.0"
 description = "Project-aware terminal companion for developers"
 readme = "README.md"
