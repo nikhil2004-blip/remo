@@ -217,6 +217,11 @@ def init() -> None:
             f"  [dim]Not a git repo — skipping .gitignore update.[/]"
         )
 
+    # Launch auto-reminders directly after init
+    if reminders:
+        from remo.commands.startup import _launch_auto_reminders
+        _launch_auto_reminders(reminders, project_name, cwd)
+
     console.print()
     console.print(
         f"  [dim]Run [bold]remo[/bold] to see your startup panel, "

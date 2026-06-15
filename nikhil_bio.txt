@@ -1,0 +1,25 @@
+========================================================================
+                      PROFILE: NIKHIL KUMAR YADAV
+========================================================================
+
+General Profile
+---------------
+* Name: Nikhil Kumar Yadav
+* GitHub: nikhil2004-blip
+* Development Environment: Windows OS
+* Primary Project: remo (a productivity, command-shortcut, and reminder CLI/daemon tool)
+
+Key Projects & Context
+----------------------
+Currently working on "remo" (nikhil2004-blip/remo), a utility that helps set up projects, run tests, and provide reminders (e.g., "drink water", "Take a stretch break"). 
+
+Positive Observations
+---------------------
+* Focus on Developer Productivity: You build tools to automate workflows, including virtual environment activations, custom shell shortcuts, and automated tests.
+* Health & Well-being Mindset: Integrating personal reminders like hydration and stretching directly into your development workflow shows a balanced approach to long coding sessions.
+* Rigorous Testing: You maintain automated test suites (`pytest tests/`) and ensure tests run as part of the project lifecycle.
+
+Constructive Opinions & Quirks
+-----------------------------
+* High-Speed Communication: You tend to type queries and requests very quickly, sometimes leaving typos ("nikhil kuamr yadav", "all you knwo", "everthing sin there"). This suggests you prefer speed and action over typing perfect prose, relying on the agent to understand your intent correctly (which we do!).
+* Windows Power User: You operate comfortably within PowerShell and active virtual environments.

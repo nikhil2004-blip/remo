@@ -1,22 +1,23 @@
 {
-    "project": "remo tour",
+    "project": "remo",
     "startup": [
-        "Activate virtual environment",
-        "start the dev server (remo run dev)",
-        "Run tests before pushing"
+        "hello nikhil",
+        "what is up man",
+        "do remo init",
+        "then do remo status"
     ],
     "reminders": [
         {
-            "after": "20s",
+            "after": "10s",
             "message": "drink water"
         },
         {
-            "after": "30m",
-            "message": "Take a 5 minute stretch break \ud83e\uddd8\u200d\u2642\ufe0f"
+            "after": "20s",
+            "message": "git push"
         }
     ],
     "shortcuts": {
-        "test": "pytest tests/ -v",
-        "build": "python -m build"
+        "hel": "systeminfo",
+        "show": "pip show"
     }
 }
