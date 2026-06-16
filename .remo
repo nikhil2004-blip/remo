@@ -1,23 +1,23 @@
 {
-    "project": "remo",
+    "project": "test",
     "startup": [
-        "hello nikhil",
-        "what is up man",
-        "do remo init",
-        "then do remo status"
+        "nhfdssa",
+        "asdsfaf",
+        "agafgad",
+        "adfgag"
     ],
     "reminders": [
         {
             "after": "10s",
-            "message": "drink water"
+            "message": "git oush"
         },
         {
-            "after": "20s",
-            "message": "git push"
+            "after": "2s",
+            "message": "drink water"
         }
     ],
     "shortcuts": {
-        "hel": "systeminfo",
-        "show": "pip show"
+        "is": "ipconfig",
+        "sw": "systeminfo"
     }
 }

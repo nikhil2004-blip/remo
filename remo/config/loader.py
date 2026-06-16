@@ -32,6 +32,11 @@ def _load_json_file(path: Path) -> Dict[str, Any]:
             f"Invalid JSON in {path.name}: {exc.msg} (line {exc.lineno})",
             hint=f"Check line {exc.lineno} of {path} for syntax errors.",
         ) from exc
+    except OSError as exc:
+        raise ConfigError(
+            f"Could not read config file {path.name}: {exc}",
+            hint="Check file permissions or if it's a directory.",
+        ) from exc
 
 
 def _merge_configs(
@@ -71,7 +76,7 @@ def find_remo_file(start_dir: Optional[Path] = None) -> Optional[Path]:
         for directory in [current, *current.parents]:
             candidate = directory / REMO_FILE
             try:
-                if candidate.exists():
+                if candidate.is_file():
                     return candidate
             except PermissionError:
                 pass
