@@ -18,6 +18,6 @@
     ],
     "shortcuts": {
         "is": "ipconfig",
-        "sw": "systeminfo"
+        "md": "mkdir"
     }
 }

@@ -20,15 +20,17 @@ def _get_config():
     return load_config()
 
 
-@click.command()
+@click.command(context_settings={"ignore_unknown_options": True})
 @click.argument("shortcut_name")
-def run(shortcut_name: str) -> None:
+@click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
+def run(shortcut_name: str, extra_args: tuple) -> None:
     """Execute a project shortcut defined in .remo config.
 
     \b
     Example:
       remo run dev      # runs: uvicorn main:app --reload
       remo run test     # runs: pytest tests/ -v
+      remo run md name  # passes 'name' as an extra argument
     """
     from remo.config.loader import load_config, ConfigError
 
@@ -58,6 +60,9 @@ def run(shortcut_name: str) -> None:
         sys.exit(1)
 
     cmd = shortcuts[shortcut_name]
+    if extra_args:
+        cmd = f"{cmd} {' '.join(extra_args)}"
+
     console.print(
         f"  [{COLORS['header']}]»[/] [bold]{shortcut_name}[/bold]: "
         f"[dim]{cmd}[/dim]"
